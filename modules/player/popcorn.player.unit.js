@@ -8,7 +8,7 @@ test( "Base player methods", 4, function() {
 
   Popcorn.player( "newplayer" );
   ok( Popcorn.newplayer, "Popcorn.player registers new players" );
-  ok( Popcorn.player.registry[ "newplayer" ], "newplayers enter Popcorn.player.registry" );
+  ok( Popcorn.player.registry.newplayer, "newplayers enter Popcorn.player.registry" );
 
 });
 
@@ -197,11 +197,13 @@ test( "player gets a proper _teardown", 1, function() {
 
 asyncTest( "Popcorn.smart player selector", function() {
 
-  var expects = 10,
+  var expects = 11,
       count = 0;
 
   function plus() {
+
     if ( ++count == expects ) {
+      document.getElementById( "video" ).innerHTML = "";
       start();
     }
   }
@@ -223,6 +225,16 @@ asyncTest( "Popcorn.smart player selector", function() {
   plus();
   equal( Popcorn.smart( "#video", "this is sparta" ).media.nodeName, "DIV", "A player was found for this URL" );
   plus();
+
+  // invalid target throws meaningful error
+  try {
+
+    Popcorn.smart( "#non_existing_tag", "this is sparta" );
+  } catch ( e ) {
+
+    ok( true, "Popcorn.smart throws exception when target is invalid." );
+    plus();
+  }
 
   // not matching url to player returns false
   ok( Popcorn.spartaPlayer.canPlayType( "div", "this is not sparta" ) === false, "canPlayType method fails on invalid url!" );
@@ -329,4 +341,68 @@ asyncTest( "Popcorn.smart - audio and video elements", function() {
   equal( p.media.src, "http://videos.mozilla.org/serv/webmademovies/atultroll.webm", "Overwrote original source on video element, using specified source" );
   p.destroy();
   plus();
+});
+
+asyncTest( "Popcorn.smart - multiple sources for mixed media", function() {
+
+  Popcorn.player( "playerOne", {
+    _canPlayType: function( nodeName, url ) {
+
+      return url === "playerOne";
+    }
+  });
+
+  Popcorn.player( "playerTwo", {
+    _canPlayType: function( nodeName, url ) {
+
+      return url === "playerTwo";
+    }
+  });
+
+  expect( 8 );
+
+  var p1, p2, p3, p4, p5, p6, p7, p8,
+      srcResult;
+
+  p1 = Popcorn.smart( "#multi-div-mixed1", [ "invalid", "../../test/trailer.ogv", "playerOne" ] );
+  p2 = Popcorn.smart( "#multi-div-mixed2", [ "playerOne", "../../test/trailer.ogv", "playerTwo" ] );
+  p3 = Popcorn.smart( "#multi-div-mixed3", "playerTwo" );
+  p4 = Popcorn.smart( "#multi-div-mixed4", [ "invalid", "playerTwo", "../../test/trailer.ogv" ] );
+  p5 = Popcorn.smart( "#multi-div-mixed5", "../../test/trailer.ogv" );
+  p6 = Popcorn.smart( "#multi-div-mixed6",
+    [ "../../test/trailer.derp?smartnotsosmart=no",
+      "../../test/trailer.ogv?arewesmartyet=yes",
+      "../../test/trailer.derp?smartnotsosmart=no" ] );
+  p7 = Popcorn.smart( "#multi-div-mixed7",
+    [ "http://usr:pwd@www.test.com:81/dir/dir.2/video.derp?q1=0&&test1&test2=value#top",
+      "http://usr:pwd@www.test.com:81/dir/dir.2/video.ogv?q1=0&&test1&test2=value#top",
+      "http://usr:pwd@www.test.com:81/dir/dir.2/video.derp?q1=0&&test1&test2=value#top" ] );
+  p8 = Popcorn.smart( "#multi-div-mixed8",
+    [ "host.com:81/direc.tory/file.derp?query=1&test=2#anchor",
+      "host.com:81/direc.tory/file.webm?query=1&test=2#anchor",
+      "host.com:81/direc.tory/file.derp?query=1&test=2#anchor" ] );
+
+  srcResult = p1.media.src.split( "/" );
+  equal( p1.media.src.split( "/" )[ srcResult.length - 1 ], "trailer.ogv", "HTML5 works as valid fallback." );
+
+  srcResult = p2.media.src.split( "/" );
+  equal( p2.media.src.split( "/" )[ srcResult.length - 1 ], "playerOne", "Custom playerOne works as first media, if valid." );
+
+  srcResult = p3.media.src.split( "/" );
+  equal( p3.media.src.split( "/" )[ srcResult.length - 1 ], "playerTwo", "Custom playerTwo works as first media, even if it is the only media." );
+
+  srcResult = p4.media.src.split( "/" );
+  equal( p4.media.src.split( "/" )[ srcResult.length - 1 ], "playerTwo", "Custom playerTwo works as valid fallback." );
+
+  srcResult = p5.media.src.split( "/" );
+  equal( p5.media.src.split( "/" )[ srcResult.length - 1 ], "trailer.ogv", "HTML5 works as first media, even if it is the only media." );
+
+  srcResult = p6.media.src.split( "/" );
+  equal( p6.media.src.split( "/" )[ srcResult.length - 1 ], "trailer.ogv?arewesmartyet=yes", "HTML5 works as second valid media, even if it has a query string." );
+
+  equal( p7.media.src, "http://usr:pwd@www.test.com:81/dir/dir.2/video.ogv?q1=0&&test1&test2=value#top", "HTML5 works as second valid media, even if it has a query string." );
+
+  equal( p8.media.src, "host.com:81/direc.tory/file.webm?query=1&test=2#anchor", "HTML5 works as second valid media, even if it has a query string." );
+
+  start();
 });

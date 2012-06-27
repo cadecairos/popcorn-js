@@ -1,6 +1,6 @@
 module( "Popcorn Soundcloud Player" );
 asyncTest( "Default Attribute Functionality", function () {
-  var expects = 4,
+  var expects = 5,
       count = 0,
       playerDefault,
       playerOverride,
@@ -38,6 +38,11 @@ asyncTest( "Default Attribute Functionality", function () {
     plus();
 
     equal( target.children.length, 2, "The container has 2 players" );
+    plus();
+  });
+
+  playerOverride.on( "load", function() {
+    equal( playerOverride.duration(), 217.16, "Duration updated" );
     plus();
   });
 
@@ -105,6 +110,7 @@ asyncTest( "Popcorn Integration", function () {
       player = Popcorn.soundcloud( "player_1", "http://api.soundcloud.com/tracks/12643174" );
 
   function plus() {
+
     if ( ++count === expects ) {
       start();
       player.destroy();
@@ -113,7 +119,8 @@ asyncTest( "Popcorn Integration", function () {
 
   expect(expects);
 
-  player.on( "load", function() {
+  player.on( "canplaythrough", function() {
+
     ok( true, "Listen works (load event)" );
     plus();
 
@@ -125,6 +132,7 @@ asyncTest( "Popcorn Integration", function () {
     });
 
     player.on( "pause", function() {
+
       ok( true, "Pause explicitly called" );
       plus();
 
@@ -160,13 +168,23 @@ asyncTest( "Events and Player Control", function () {
     plus();
   });
 
-  player.on( "playing", function() {
-    ok( true, "Playing was fired" );
-    plus();
+  player.on( "playing", (function() {
+    var hasFired = 0;
 
-    equal( player.paused(), 0, "Paused is unset" );
-    plus();
-  });
+    return function() {
+      if ( hasFired ) {
+        return;
+      }
+
+      hasFired = 1;
+      ok( true, "Playing was fired" );
+      plus();
+
+      equal( player.paused(), false, "Paused is unset" );
+      plus();
+      player.pause();
+    };
+  })());
 
   player.on( "play", (function() {
     var hasFired = 0;
@@ -179,7 +197,7 @@ asyncTest( "Events and Player Control", function () {
       hasFired = 1;
       ok( true, "Play was fired" );
       plus();
-    }
+    };
   })());
 
   player.on( "durationchange", function() {
@@ -193,15 +211,16 @@ asyncTest( "Events and Player Control", function () {
 
     equal( player.readyState(), 4, "Ready State is now 4" );
     plus();
-
-    player.pause();
   }, false);
 
   player.on( "pause", function() {
+
     ok( true, "Pause was fired by dispatch" );
     plus();
 
-    equal( player.paused(), 1, "Paused is set" );
+    equal( player.paused(), true, "Paused is set" );
+
+    player.play();
     plus();
   });
 
@@ -216,36 +235,56 @@ asyncTest( "Events and Player Control", function () {
 
       ok( true, "Timeupdate was fired by dispatch" );
       plus();
-    }
+    };
   })());
 
   player.on( "volumechange", function() {
+    player.off( "volumechange" );
     ok( true, "volumechange was fired by dispatch" );
     plus();
+  });
+
+  player.cue( 10, function() {
+    // Will trigger a "seeked" event to near end
+    player.currentTime( player.duration() - 1 );
   });
 
   player.on( "canplaythrough", function() {
     ok( true, "Can play through" );
     plus();
-
-    // Will trigger a "seeked" event to near end
-    player.currentTime( player.duration() - 1 );
   });
 
-  player.on( "seeked", function() {
-    ok( true, "Seeked was fired" );
-    plus();
+  player.on( "seeked", (function() {
+    var hasFired = 0;
 
-    player.emit( "play" );
-  });
+    return function() {
+      if ( hasFired ) {
+        return;
+      }
+      hasFired = 1;
+      ok( true, "Seeked was fired" );
+      plus();
+    };
+  })());
 
   player.on( "ended", function() {
+
     ok( true, "Media is done playing" );
     plus();
 
-    equal( player.paused, 1, "Paused is set on end" );
+    equal( player.paused(), true, "Paused is set on end" );
     plus();
   });
 
-  player.play();
+  var ready = function() {
+
+    player.off( "canplaythrough", ready );
+    player.play();
+  };
+
+  if ( player.readyState() >= 4 ) {
+    ready();
+  } else {
+    player.on( "canplaythrough", ready );
+  }
 });

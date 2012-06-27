@@ -20,6 +20,21 @@ test( "Core", function() {
   } catch ( e ) {};
 });
 
+asyncTest( "Unsupported video error", function() {
+
+  var unsupported = document.createElement( "video" ),
+      popcorn = Popcorn( unsupported );
+
+  popcorn.on( "error", function() {
+
+    equal( popcorn.error.code, 4, "Unsupported video reports error code 4." );
+    popcorn.destroy();
+    start();
+  });
+
+  unsupported.src = "data:video/x-unsupported,0";
+});
+
 test( "noConflict", function() {
 
   expect( 6 );
@@ -879,13 +894,14 @@ test( "roundTime", function() {
 
 test( "exec", function() {
 
-  QUnit.reset();
-
   var popped = Popcorn( "#video" ),
-      expects = 2,
+      expects = 3,
       count = 0,
-      hasLooped = false,
-      loop = 0;
+      loop = 0,
+      flags = {
+        looped: false,
+        smpte: false
+      };
 
   expect( expects + 1 );
 
@@ -894,7 +910,7 @@ test( "exec", function() {
 
       setTimeout(function() {
 
-        equal( loop, expects, "cue callback repeat check, only called twice" );
+        equal( loop, 2, "cue callback repeat check, only called twice" );
         Popcorn.removePlugin( popped, "cue" );
         popped.destroy();
         start();
@@ -904,20 +920,28 @@ test( "exec", function() {
 
   stop();
 
+  // Supports SMPTE
+  popped.cue( "00:00:04", function() {
+    if ( !flags.smpte ) {
+      flags.smpte = true;
+      ok( true, "cue supports SMPTE" );
+      plus();
+    }
+  });
+
+
   popped.cue( 4, function() {
     ok( loop < 2, "cue callback fired " + ++loop );
     plus();
 
-    if ( !hasLooped ) {
-
-      popped.currentTime( 3 ).play();
-
-      hasLooped = true;
+    if ( !flags.looped ) {
+      flags.looped = true;
+      popped.play( 3 );
     }
-  }).currentTime( 3 ).play();
+  }).play( 3 );
 });
 
-test( "cue (alias of exec)", function() {
+test( "cue: alias of exec", function() {
   expect( 2 );
   ok( Popcorn.p.cue, "Popcorn.p.cue exists" );
   equal( typeof Popcorn.p.cue, "function", "Popcorn.p.cue is a function" );
@@ -1124,7 +1148,7 @@ test( "Popcorn.extend", function() {
 test( "Popcorn.events", function() {
 
   QUnit.reset()
-  expect( 43 );
+  expect( 44 );
 
   var eventTypes = [ "UIEvents", "MouseEvents", "Events" ],
       natives = "",
@@ -1255,14 +1279,27 @@ test( "Popcorn.events.hooks: canplayall fires immediately if ready", function() 
   poll();
 });
 
-/*
-<video height="180" width="300" id="video" controls>
-<source src="http://videos.mozilla.org/serv/webmademovies/popcornplug.mp4"></source>
-<source src="http://videos.mozilla.org/serv/webmademovies/popcornplug.ogv"></source>
-<source src="http://videos.mozilla.org/serv/webmademovies/popcornplug.webm"></source>
-</video>
+asyncTest( "Popcorn.events.hooks: attrchange fires when attribute setter methods are called", 1, function() {
 
-*/
+  var $pop = Popcorn( "#video" ),
+      attr = "controls",
+      initialValue = $pop[ attr ](),
+      expectedData = {
+        attribute: attr,
+        previousValue: initialValue,
+        currentValue: !initialValue
+      };
+
+  $pop.on( "attrchange", function( data ) {
+
+    deepEqual( data, expectedData, "attrchange reports the correct expected data" );
+    start();
+  });
+
+  // The first attr call shouldn't emit attrchange, only the second one should
+  $pop[ attr ]( initialValue );
+  $pop[ attr ]( !initialValue );
+});
 
 module( "Popcorn.dom" );
 
@@ -1802,6 +1839,23 @@ test( "UI/Mouse", function() {
 });
 
 module( "Popcorn Plugin" );
+
+test( "Plugin _id applied before setup", function() {
+
+  expect( 1 );
+
+  var p = Popcorn( "#video" );
+
+  Popcorn.plugin( "idPlugin", {
+    _setup: function( options ) {
+      ok( options._id, "_id was set before setup" );
+      Popcorn.removePlugin( "idPlugin" );
+    }
+  });
+
+  p.idPlugin({});
+});
+
 test( "Manifest", function() {
 
   var p = Popcorn( "#video" ),
@@ -2181,7 +2235,7 @@ test( "Exceptions", function() {
       plus();
     }).currentTime( 0 ).play();
 
-    this.on( "error", function( errors ) {
+    this.on( "pluginerror", function( errors ) {
       ok( errors.length, "`errors` array has error objects" );
       plus();
       ok( errors[ 0 ].thrown, "`errors[ 0 ].thrown` property exists" );
@@ -2232,7 +2286,7 @@ test( "Start Zero Immediately", function() {
 test( "Special track event listeners: trackstart, trackend", function() {
 
   var $pop = Popcorn( "#video" ),
-      expects = 4,
+      expects = 24,
       count = 0;
 
   expect( expects );
@@ -2257,24 +2311,79 @@ test( "Special track event listeners: trackstart, trackend", function() {
 
   $pop.emitter({
     start: 1,
-    end: 3
+    end: 3,
+    direction: "forward"
+  }).emitter({
+    start: 4,
+    end: 6,
+    direction: "backward"
   }).on( "trackstart", function( event ) {
 
-    equal( event.type, "trackstart", "Special trackstart event object includes correct type" );
-    plus();
+    if ( event.plugin === "cue" ) {
+      ok( !event.direction, "trackstart no plugin specific data on cue" );
+      plus();
 
+      equal( event._running, true, "cue event is running on trackstart" );
+      plus();
 
-    equal( event.plugin, "emitter", "Special trackstart event object includes correct plugin name" );
-    plus();
+      equal( event.type, "trackstart", "cue special trackstart event object includes correct type" );
+      plus();
+
+      equal( event.plugin, "cue", "cue special trackstart event object includes correct plugin name" );
+      plus();
+    } else if ( event.plugin === "emitter" ) {
+      ok( event.direction, "a direction exsists with plugin specific data going " + event.direction );
+      plus();
+
+      equal( event._running, true, "event is running on trackstart going " + event.direction );
+      plus();
+
+      equal( event.type, "trackstart", "Special trackstart event object includes correct type going " + event.direction );
+      plus();
+
+      equal( event.plugin, "emitter", "Special trackstart event object includes correct plugin name " + event.direction );
+      plus();
+    } else {
+      ok( false, "invalid plugin fired trackstart" );
+      plus();
+    }
 
   }).on( "trackend", function( event ) {
 
-    equal( event.type, "trackend", "Special trackend event object includes correct type" );
-    plus();
+    if ( event.plugin === "cue" ) {
+      ok( !event.direction, "trackend no plugin specific data on cue" );
+      plus();
 
-    equal( event.plugin, "emitter", "Special trackend event object includes correct plugin name" );
-    plus();
+      equal( event._running, false, "cue event is not running on trackend" );
+      plus();
 
+      equal( event.type, "trackend", "cue special trackend event object includes correct type" );
+      plus();
+
+      equal( event.plugin, "cue", "cue special trackend event object includes correct plugin name" );
+      plus();
+    } else if ( event.plugin === "emitter" ) {
+      ok( event.direction, "a direction exsists with plugin specific data going " + event.direction );
+      plus();
+
+      equal( event._running, false, "event is not running on trackend going " + event.direction );
+      plus();
+
+      equal( event.type, "trackend", "Special trackend event object includes correct type " + event.direction );
+      plus();
+
+      equal( event.plugin, "emitter", "Special trackend event object includes correct plugin name " + event.direction );
+      plus();
+    } else {
+      ok( false, "invalid plugin fired trackend" );
+    }
+
+  }).cue( 4, function() {
+    $pop.pause().currentTime( 10 );
+  }).cue( 10, function() {
+    $pop.currentTime( 5 );
+  }).cue( 5, function() {
+    $pop.currentTime( 0 );
   }).play();
 });
 
@@ -4173,6 +4282,141 @@ test( "end undefined or false should never be fired", function() {
   $pop.endingStory({ end: $pop.duration() });
   $pop.currentTime( $pop.duration() );
 });
+
+asyncTest( "Plug-ins with a `once` attribute should be removed after `end` is fired.", 3, function() {
+
+  var $pop = Popcorn( "#video" ),
+      startFired = 0;
+      endFired = 0;
+
+  Popcorn.plugin( "onceplugin", {
+    start: function() {
+      if ( !startFired ) {
+        ok( true, "start called once" );
+        startFired++;
+      } else {
+        ok( false, "Start should oly execute once!" )
+        startFired++;
+      }
+    },
+    end: function() {
+      if ( !endFired ) {
+        ok( true, "end called once" );
+        this.currentTime( 0 );
+        endFired++;
+      } else {
+        ok( false, "End should only execute once!" );
+        endFired++;
+      }
+    }
+  });
+
+  $pop.onceplugin({ start: 2, end: 3, once: true });
+
+  $pop.cue( 4, function() {
+    ok( startFired === 1 && endFired === 1, "start and end called one each" );
+    $pop.removePlugin( "onceplugin" );
+    $pop.destroy();
+    start();
+  });
+
+  $pop.play( 0 );
+});
+
+asyncTest( "Modify cue or track event after creation", 6, function() {
+  var p = Popcorn( "#video" ),
+      passed = 0;
+
+  Popcorn.plugin( "modifyMe", {
+    start: function( event, options ) {
+      var floor = Math.floor( this.currentTime() );
+
+      // This test will fail the unit if it is run
+      if ( floor === 10 ) {
+        ok( false, "Plugin track start at 10 seconds should never fire because it is changed to 11 seconds" );
+      }
+
+      if ( floor === 11 ) {
+        ok( true, "Plugin track start at 11 seconds fired, it was changed from 10 to 11" );
+        passed++;
+
+        equal( options.content, "Hola!", "Plugin track content property was updated" );
+        passed++;
+      }
+
+      // This is the passing test for the unchanged plugin call
+      if ( floor === 12 ) {
+        ok( true, "Plugin track start at 12 seconds fired (unchanged)" );
+        passed++;
+      }
+    },
+    end: function() {
+      var floor = Math.floor( this.currentTime() );
+
+      // This test will fail the unit if it is run
+      if ( floor === 11 ) {
+        ok( false, "Plugin track end at 11 seconds should never fire because it is changed to 12 seconds" );
+      }
+
+      if ( floor === 12 ) {
+        ok( true, "Plugin track end at 12 seconds fired, it was changed from 11 to 12" );
+        passed++;
+      }
+
+      if ( passed === 4 ) {
+        start();
+      }
+    }
+  });
+
+  p.on( "canplayall", function() {
+
+    // traditional, unchanging cue
+    p.cue( 11, function() {
+      ok( true, "Cue at 11 seconds fired (unchanged)" );
+    });
+
+    // set a cue at 10 seconds
+    p.cue( "cue-id", 10, function() {
+      ok( false, "Cue at 10 seconds should never fire, because it is changed to 12 seconds" );
+    });
+
+    // now I want to change that cue to 12:
+    p.cue( "cue-id", 12 );
+
+    // now change the function...
+    p.cue( "cue-id", function() {
+      ok( true, "Cue at 12 seconds fired, it was changed from 10 to 12" );
+    });
+
+    // traditional, unchanging plugin call
+    p.modifyMe({
+      start: 12,
+      end: 13
+    });
+
+    // set up a new changeable trackevent
+    p.modifyMe( "plugin-id", {
+      start: 10,
+      end: 11,
+      content: "Hi!"
+    });
+
+    // change it to start at 11
+    p.modifyMe( "plugin-id", {
+      start: 11,
+      content: "Hola!"
+    });
+
+    // change it to end at 12
+    p.modifyMe( "plugin-id", {
+      end: 12
+    });
+
+    p.play( 9 );
+  });
+});
+
 
 module( "Popcorn XHR" );
 test( "Basic", function() {

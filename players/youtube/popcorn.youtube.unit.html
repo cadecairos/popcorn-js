@@ -4,6 +4,9 @@
   <title>Popcorn YouTube Player</title>
   <link rel="stylesheet" href="../../test/qunit/qunit.css" type="text/css" media="screen">
   <script src="../../test/qunit/qunit.js"></script>
+
+  <!-- Tests the safe-load of Youtube library -->
+  <script src="http://s.ytimg.com/yt/jsbin/www-widgetapi-vflCAfh6H.js"></script>
   <!--
     do not move - this must be called immediately prior to popcorn.js.
   -->
@@ -38,7 +41,7 @@
   <div id="video2" style="width: 360px; height: 300px" ></div>
   <div id="video3" style="width: 360px; height: 300px" ></div>
   <div id="video4"></div>
-  <div id="video5" style="width: 0px; height: 0px" ></div>
+  <div id="video5" style="width: 1px; height: 1px" ></div>
   <div id="video6" style="width: 360px; height: 300px" ></div>
   <div id="video7" style="width: 360px; height: 300px" ></div>
   <div id="video8" style="width: 360px; height: 300px" ></div>

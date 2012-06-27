@@ -13,32 +13,43 @@
           container = document.createElement( "iframe" ),
           lastVolume = 1,
           currentTime = 0,
+          paused = true,
+          realPaused = true,
           widget,
           duration = 0,
-          muted = false;
+          muted = false,
+          playerQueue = Popcorn.player.playerQueue();
 
       options._container = container;
       media.style.visibility = "hidden";
 
       media.play = function() {
 
-        if ( media.paused ) {
+        paused = false;
+        playerQueue.add(function() {
 
-          media.paused = false;
-          media.dispatchEvent( "playing" );
-          media.dispatchEvent( "play" );
-          widget && widget.play();
-        }
+          if ( realPaused ) {
+
+            widget && widget.play();
+          } else {
+            playerQueue.next();
+          }
+        });
       };
 
       media.pause = function() {
 
-        if ( !media.paused ) {
+        paused = true;
 
-          media.paused = true;
-          media.dispatchEvent( "pause" );
-          widget && widget.pause();
-        }
+        playerQueue.add(function() {
+
+          if ( !realPaused ) {
+
+            widget && widget.pause();
+          } else {
+            playerQueue.next();
+          }
+        });
       };
 
       // getter and setter for muted property, multiply volume by 100 as that is the scale soundcloud works on
@@ -86,6 +97,11 @@
           get: function() {
             return duration;
           }
+        },
+        paused: {
+          get: function() {
+            return paused;
+          }
         }
       });
       // called when the SoundCloud api script has loaded
@@ -114,29 +130,38 @@
           container.width = "100%";
           container.height = "100%";
 
-          container.addEventListener( "load", function( e ) {
+          options.loadListener = function( e ) {
             options.widget = widget = SC.Widget( container.id );
             // setup all of our listeners
             widget.bind(SC.Widget.Events.FINISH, function() {
+              media.pause();
+
               media.dispatchEvent( "ended" );
             });
 
             widget.bind(SC.Widget.Events.PLAY_PROGRESS, function( data ) {
+
               currentTime = data.currentPosition / 1000;
               media.dispatchEvent( "timeupdate" );
             });
 
             widget.bind(SC.Widget.Events.PLAY, function( data ) {
 
-              if ( media.paused ) {
-                media.currentTime = currentTime;
-                media.paused && media.play();
-              }
+              paused = realPaused = false;
+
+              media.dispatchEvent( "play" );
+              media.dispatchEvent( "playing" );
+              media.currentTime = currentTime;
+
+              playerQueue.next();
             });
 
             widget.bind(SC.Widget.Events.PAUSE, function( data ) {
 
-              !media.paused && media.pause();
+              paused = realPaused = true;
+              media.dispatchEvent( "pause" );
+
+              playerQueue.next();
             });
             widget.bind(SC.Widget.Events.READY, function( data ) {
               widget.getDuration(function( data ) {
@@ -158,7 +183,9 @@
                 lastVolume = data / 100;
               });
             });
-          }, false);
+          };
+
+          container.addEventListener( "load", options.loadListener, false );
           media.appendChild( container );
         });
       }
@@ -199,9 +226,15 @@
 
       options.destroyed = true;
 
+      // if the widget never got setup, remove the containers load listener and return
+      if ( !widget ) {
+        container.removeEventListener( "load", options.loadEventListener, false );
+        return;
+      }
+
       // remove all bound soundcloud listeners
       for ( var prop in events ) {
-        widget.unbind( events[ prop ] );
+        widget && widget.unbind( events[ prop ] );
       }
     }
   });

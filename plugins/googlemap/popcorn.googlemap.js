@@ -150,21 +150,23 @@ var googleCallback;
     // before setting up the map parameters
     var isMapReady = function () {
       if ( _mapLoaded ) {
-        if ( options.location ) {
-          // calls an anonymous google function called on separate thread
-          geocoder.geocode({
-            "address": options.location
-          }, function ( results, status ) {
-            if ( status === google.maps.GeocoderStatus.OK ) {
-              options.lat = results[ 0 ].geometry.location.lat();
-              options.lng = results[ 0 ].geometry.location.lng();
-              location = new google.maps.LatLng( options.lat, options.lng );
-              map = buildMap( options, location, newdiv );
-            }
-          });
-        } else {
-          location = new google.maps.LatLng( options.lat, options.lng );
-          map = buildMap( options, location, newdiv );
+        if ( newdiv ) {
+          if ( options.location ) {
+            // calls an anonymous google function called on separate thread
+            geocoder.geocode({
+              "address": options.location
+            }, function ( results, status ) {
+              if ( status === google.maps.GeocoderStatus.OK ) {
+                options.lat = results[ 0 ].geometry.location.lat();
+                options.lng = results[ 0 ].geometry.location.lng();
+                location = new google.maps.LatLng( options.lat, options.lng );
+                map = buildMap( options, location, newdiv );
+              }
+            });
+          } else {
+            location = new google.maps.LatLng( options.lat, options.lng );
+            map = buildMap( options, location, newdiv );
+          }
         }
       } else {
           setTimeout(function () {
@@ -393,7 +395,7 @@ var googleCallback;
       target: "map-container",
       type: {
         elem: "select",
-        options: [ "ROADMAP", "SATELLITE", "STREETVIEW", "HYBRID", "TERRAIN" ],
+        options: [ "ROADMAP", "SATELLITE", "STREETVIEW", "HYBRID", "TERRAIN", "STAMEN-WATERCOLOR", "STAMEN-TERRAIN", "STAMEN-TONER" ],
         label: "Type",
         optional: true
       },
@@ -401,6 +403,7 @@ var googleCallback;
         elem: "input",
         type: "text",
         label: "Zoom",
+        "default": 0,
         optional: true
       },
       lat: {
@@ -418,18 +421,21 @@ var googleCallback;
       location: {
         elem: "input",
         type: "text",
-        label: "Location"
+        label: "Location",
+        "default": "Toronto, Ontario, Canada"
       },
       heading: {
         elem: "input",
         type: "text",
         label: "Heading",
+        "default": 0,
         optional: true
       },
       pitch: {
         elem: "input",
         type: "text",
         label: "Pitch",
+        "default": 1,
         optional: true
       }
     }
