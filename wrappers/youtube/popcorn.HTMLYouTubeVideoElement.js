@@ -31,6 +31,13 @@
     ytCallbacks.unshift( callback );
   }
 
+  // An existing YouTube references can break us.
+  // Remove it and use the one we can trust.
+  if ( window.YT ) {
+    window.quarantineYT = window.YT;
+    window.YT = null;
+  }
+
   window.onYouTubeIframeAPIReady = function() {
     ytReady = true;
     var i = ytCallbacks.length;
