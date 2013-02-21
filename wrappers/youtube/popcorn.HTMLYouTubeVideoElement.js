@@ -12,32 +12,23 @@
 
   // Setup for YouTube API
   ytReady = false,
-  ytLoaded = false,
   ytCallbacks = [];
 
   function isYouTubeReady() {
     // If the YouTube iframe API isn't injected, to it now.
-    if( !ytLoaded ) {
+    if( !window.YT ) {
       var tag = document.createElement( "script" );
       var protocol = window.location.protocol === "file:" ? "http:" : "";
 
       tag.src = protocol + "//www.youtube.com/iframe_api";
       var firstScriptTag = document.getElementsByTagName( "script" )[ 0 ];
       firstScriptTag.parentNode.insertBefore( tag, firstScriptTag );
-      ytLoaded = true;
     }
     return ytReady;
   }
 
   function addYouTubeCallback( callback ) {
     ytCallbacks.unshift( callback );
-  }
-
-  // An existing YouTube references can break us.
-  // Remove it and use the one we can trust.
-  if ( window.YT ) {
-    window.quarantineYT = window.YT;
-    window.YT = null;
   }
 
   window.onYouTubeIframeAPIReady = function() {
@@ -217,7 +208,7 @@
             self.dispatchEvent( "loadedmetadata" );
             currentTimeInterval = setInterval( monitorCurrentTime,
                                                CURRENT_TIME_MONITOR_MS );
-            
+
             self.dispatchEvent( "loadeddata" );
 
             impl.readyState = self.HAVE_FUTURE_DATA;
